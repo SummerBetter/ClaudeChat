@@ -68,7 +68,7 @@ struct ChatView: View {
                             .font(.caption.weight(.medium))
                             .foregroundColor(profile.profile.color)
                     } else {
-                        Text("Claude")
+                        Text(profile.profile.claudeNickname)
                             .font(.caption.weight(.medium))
                             .foregroundColor(.orange)
                     }
@@ -119,15 +119,29 @@ struct ChatView: View {
     }
 
     private func avatarView(isUser: Bool) -> some View {
-        Text(isUser ? profile.profile.avatarEmoji : "✨")
-            .font(.title3)
-            .frame(width: 32, height: 32)
-            .background(
-                Circle()
-                    .fill(isUser
-                          ? profile.profile.color.opacity(0.15)
-                          : Color.orange.opacity(0.15))
-            )
+        ZStack {
+            Circle()
+                .fill(isUser ? profile.profile.color.opacity(0.15) : Color.orange.opacity(0.15))
+            if isUser {
+                Text(profile.profile.avatarEmoji).font(.title3)
+            } else {
+                claudeAvatarContent
+            }
+        }
+        .frame(width: 32, height: 32)
+    }
+
+    @ViewBuilder
+    private var claudeAvatarContent: some View {
+        if let imageData = profile.profile.claudeAvatarImageData,
+           let nsImage = NSImage(data: imageData) {
+            Image(nsImage: nsImage)
+                .resizable()
+                .scaledToFill()
+                .clipShape(Circle())
+        } else {
+            Text(profile.profile.claudeAvatarEmoji).font(.title3)
+        }
     }
 
     @ViewBuilder

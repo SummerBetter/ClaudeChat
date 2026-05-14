@@ -12,82 +12,175 @@ struct SettingsView: View {
     ]
 
     var body: some View {
-        VStack(spacing: 20) {
-            Text("用户设置")
-                .font(.headline)
+        ScrollView {
+            VStack(spacing: 24) {
+                Text("设置")
+                    .font(.headline)
 
-            // Avatar preview
-            Text(profile.avatarEmoji)
-                .font(.system(size: 48))
-                .frame(width: 72, height: 72)
-                .background(
-                    Circle().fill(profile.color.opacity(0.2))
-                )
+                userSection
+                Divider()
+                claudeSection
+                Divider()
+                appSection
 
-            // Nickname
-            VStack(alignment: .leading, spacing: 6) {
-                Text("昵称").font(.caption).foregroundColor(.secondary)
-                TextField("", text: $profile.nickname)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
-            }
-
-            // Emoji picker
-            VStack(alignment: .leading, spacing: 6) {
-                Text("头像").font(.caption).foregroundColor(.secondary)
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 8), spacing: 4) {
-                    ForEach(emojiOptions, id: \.self) { emoji in
-                        Text(emoji)
-                            .font(.title3)
-                            .frame(width: 32, height: 32)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(profile.avatarEmoji == emoji ? profile.color.opacity(0.2) : Color.clear)
-                            )
-                            .onTapGesture { profile.avatarEmoji = emoji }
-                    }
+                Button("保存") {
+                    profile.save()
+                    dismiss()
                 }
-                .frame(width: 280)
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.return)
+                .padding(.bottom, 8)
             }
-
-            // Color picker
-            VStack(alignment: .leading, spacing: 6) {
-                Text("颜色").font(.caption).foregroundColor(.secondary)
-                HStack(spacing: 8) {
-                    ForEach(colorOptions, id: \.1) { name, hex in
-                        Circle()
-                            .fill(Color(hex: hex))
-                            .frame(width: 24, height: 24)
-                            .overlay(
-                                Circle().stroke(
-                                    profile.avatarColor == hex ? Color.primary : Color.clear,
-                                    lineWidth: 2
-                                )
-                            )
-                            .onTapGesture { profile.avatarColor = hex }
-                    }
-                }
-            }
-
-            // Color scheme mode
-            VStack(alignment: .leading, spacing: 6) {
-                Text("外观").font(.caption).foregroundColor(.secondary)
-                Picker("", selection: $profile.colorSchemeMode) {
-                    ForEach(ColorSchemeMode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 280)
-            }
-
-            Button("保存") {
-                profile.save()
-                dismiss()
-            }
-            .keyboardShortcut(.return)
+            .padding(24)
         }
-        .padding()
-        .frame(width: 360)
+        .frame(width: 400, height: 520)
+    }
+
+    // MARK: - User section
+
+    private var userSection: some View {
+        VStack(spacing: 12) {
+            Text("我的设置").font(.subheadline.weight(.medium))
+
+            Text(profile.avatarEmoji)
+                .font(.system(size: 36))
+                .frame(width: 56, height: 56)
+                .background(Circle().fill(profile.color.opacity(0.2)))
+
+            TextField("昵称", text: $profile.nickname)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 200)
+
+            emojiPicker(selection: $profile.avatarEmoji)
+
+            colorPicker(selection: $profile.avatarColor)
+        }
+    }
+
+    // MARK: - Claude section
+
+    private var claudeSection: some View {
+        VStack(spacing: 12) {
+            Text("Claude 设置").font(.subheadline.weight(.medium))
+
+            claudeAvatarPreview
+
+            TextField("昵称", text: $profile.claudeNickname)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 200)
+
+            emojiPicker(selection: $profile.claudeAvatarEmoji)
+
+            HStack(spacing: 8) {
+                Button("上传图片头像") {
+                    selectImage()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                if profile.claudeAvatarImageData != nil {
+                    Button("清除") {
+                        profile.claudeAvatarImageData = nil
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundColor(.secondary)
+                    .controlSize(.small)
+                }
+            }
+        }
+    }
+
+    // MARK: - App section
+
+    private var appSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("外观").font(.subheadline.weight(.medium))
+            Picker("", selection: $profile.colorSchemeMode) {
+                ForEach(ColorSchemeMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 280)
+        }
+    }
+
+    // MARK: - Claude avatar preview
+
+    @ViewBuilder
+    private var claudeAvatarPreview: some View {
+        Group {
+            if let imageData = profile.claudeAvatarImageData,
+               let nsImage = NSImage(data: imageData) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 56, height: 56)
+                    .clipShape(Circle())
+            } else {
+                Text(profile.claudeAvatarEmoji)
+                    .font(.system(size: 36))
+                    .frame(width: 56, height: 56)
+                    .background(Circle().fill(Color.orange.opacity(0.2)))
+            }
+        }
+    }
+
+    // MARK: - Shared components
+
+    private func emojiPicker(selection: Binding<String>) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 8), spacing: 2) {
+            ForEach(emojiOptions, id: \.self) { emoji in
+                Text(emoji)
+                    .font(.title3)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(selection.wrappedValue == emoji ? Color.accentColor.opacity(0.2) : Color.clear)
+                    )
+                    .onTapGesture { selection.wrappedValue = emoji }
+            }
+        }
+        .frame(width: 260)
+    }
+
+    private func colorPicker(selection: Binding<String>) -> some View {
+        HStack(spacing: 8) {
+            ForEach(colorOptions, id: \.1) { _, hex in
+                Circle()
+                    .fill(Color(hex: hex))
+                    .frame(width: 22, height: 22)
+                    .overlay(
+                        Circle().stroke(
+                            selection.wrappedValue == hex ? Color.primary : Color.clear,
+                            lineWidth: 2
+                        )
+                    )
+                    .onTapGesture { selection.wrappedValue = hex }
+            }
+        }
+    }
+
+    // MARK: - Image picker
+
+    private func selectImage() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png, .jpeg, .webP, .gif, .bmp, .tiff]
+        panel.allowsMultipleSelection = false
+        panel.message = "选择 Claude 头像图片"
+
+        guard panel.runModal() == .OK, let url = panel.url,
+              let data = try? Data(contentsOf: url) else { return }
+
+        // Compress if needed
+        let maxSize = 500_000 // 500KB
+        if data.count > maxSize, let img = NSImage(contentsOf: url),
+           let tiff = img.tiffRepresentation,
+           let bitmap = NSBitmapImageRep(data: tiff) {
+            profile.claudeAvatarImageData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.6])
+                ?? data
+        } else {
+            profile.claudeAvatarImageData = data
+        }
     }
 }

@@ -31,12 +31,18 @@ struct UserProfile: Equatable, Codable {
     var nickname: String
     var avatarEmoji: String
     var avatarColor: String
+    var claudeNickname: String
+    var claudeAvatarEmoji: String
+    var claudeAvatarImageData: Data?
     var colorSchemeMode: ColorSchemeMode
 
     static let `default` = UserProfile(
         nickname: "你",
         avatarEmoji: "👤",
         avatarColor: "#007AFF",
+        claudeNickname: "Claude",
+        claudeAvatarEmoji: "✨",
+        claudeAvatarImageData: nil,
         colorSchemeMode: .system
     )
 
@@ -45,13 +51,19 @@ struct UserProfile: Equatable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case nickname, avatarEmoji, avatarColor, colorSchemeMode
+        case nickname, avatarEmoji, avatarColor, claudeNickname, claudeAvatarEmoji, claudeAvatarImageData, colorSchemeMode
     }
 
-    init(nickname: String, avatarEmoji: String, avatarColor: String, colorSchemeMode: ColorSchemeMode) {
+    init(nickname: String, avatarEmoji: String, avatarColor: String,
+         claudeNickname: String, claudeAvatarEmoji: String,
+         claudeAvatarImageData: Data? = nil,
+         colorSchemeMode: ColorSchemeMode) {
         self.nickname = nickname
         self.avatarEmoji = avatarEmoji
         self.avatarColor = avatarColor
+        self.claudeNickname = claudeNickname
+        self.claudeAvatarEmoji = claudeAvatarEmoji
+        self.claudeAvatarImageData = claudeAvatarImageData
         self.colorSchemeMode = colorSchemeMode
     }
 
@@ -75,6 +87,9 @@ struct UserProfile: Equatable, Codable {
         nickname = (try? c.decode(String.self, forKey: .nickname)) ?? Self.default.nickname
         avatarEmoji = (try? c.decode(String.self, forKey: .avatarEmoji)) ?? Self.default.avatarEmoji
         avatarColor = (try? c.decode(String.self, forKey: .avatarColor)) ?? Self.default.avatarColor
+        claudeNickname = (try? c.decode(String.self, forKey: .claudeNickname)) ?? Self.default.claudeNickname
+        claudeAvatarEmoji = (try? c.decode(String.self, forKey: .claudeAvatarEmoji)) ?? Self.default.claudeAvatarEmoji
+        claudeAvatarImageData = try? c.decode(Data.self, forKey: .claudeAvatarImageData)
         colorSchemeMode = (try? c.decode(ColorSchemeMode.self, forKey: .colorSchemeMode)) ?? .system
     }
 }
