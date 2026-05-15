@@ -6,15 +6,20 @@ cd "$(dirname "$0")/macapp"
 echo "==> Building..."
 swift build
 
-echo "==> Killing old ClaudeChat..."
+echo "==> Killing old ClaudeChat & cloudflared..."
 killall ClaudeChat 2>/dev/null || true
+killall cloudflared 2>/dev/null || true
+# Also kill anything on port 8080
+lsof -ti :8080 | xargs kill -9 2>/dev/null || true
 sleep 1
-pgrep -q ClaudeChat && killall -9 ClaudeChat 2>/dev/null || true
 
 echo "==> Updating app bundle..."
 rm -rf /tmp/ClaudeChat.app
 mkdir -p /tmp/ClaudeChat.app/Contents/MacOS
+mkdir -p /tmp/ClaudeChat.app/Contents/Resources
 cp .build/debug/ClaudeChat /tmp/ClaudeChat.app/Contents/MacOS/ClaudeChat
+# Copy the SPM resource bundle
+cp .build/debug/ClaudeChat_ClaudeChat.bundle/Resources/index.html /tmp/ClaudeChat.app/Contents/Resources/index.html
 cat > /tmp/ClaudeChat.app/Contents/Info.plist << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

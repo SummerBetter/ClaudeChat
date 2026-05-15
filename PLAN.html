@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClaudeChat 跨网络远程访问 & iPhone 支持 — 实施计划</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --card: #16213e;
+    --accent: #0f3460;
+    --gold: #e94560;
+    --text: #e0e0e0;
+    --muted: #8892b0;
+    --green: #2ecc71;
+    --orange: #f39c12;
+    --blue: #3498db;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--gold), #ff6b6b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  h2 {
+    font-size: 1.3rem;
+    color: var(--gold);
+    margin: 2.5rem 0 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--accent);
+  }
+  h3 { font-size: 1.05rem; color: var(--blue); margin: 1.5rem 0 0.75rem; }
+  p { margin-bottom: 0.8rem; color: var(--muted); }
+  strong { color: var(--text); }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+  }
+  .arch {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.85rem;
+    line-height: 1.8;
+    overflow-x: auto;
+    white-space: pre;
+    color: #c9d1d9;
+  }
+  .arch .kw { color: #ff7b72; }
+  .arch .str { color: #a5d6ff; }
+  .arch .cmt { color: #8b949e; }
+  .arch .fn { color: #d2a8ff; }
+  .arch .var { color: #79c0ff; }
+  .arch .num { color: #ffa657; }
+  .highlight { background: var(--accent); color: var(--text); padding: 2px 8px; border-radius: 4px; font-size: 0.85rem; }
+  .tag { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.78rem; margin-right: 6px; }
+  .tag.new { background: var(--green); color: #000; }
+  .tag.mod { background: var(--orange); color: #000; }
+  .tag.dep { background: var(--blue); color: #fff; }
+  .tag.del { background: var(--gold); color: #fff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+  th { background: var(--accent); color: var(--text); padding: 10px 14px; text-align: left; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--accent); color: var(--muted); }
+  ol > li, ul > li { margin: 0.4rem 0; padding-left: 0.5rem; color: var(--muted); }
+  ol > li::marker { color: var(--gold); }
+  .steps { counter-reset: step; }
+  .steps li { counter-increment: step; list-style: none; position: relative; padding-left: 2.5rem; margin: 1rem 0; }
+  .steps li::before {
+    content: counter(step);
+    position: absolute; left: 0; top: 0;
+    width: 28px; height: 28px;
+    background: var(--gold);
+    color: white;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+<h1>ClaudeChat 跨网络远程访问 &amp; iPhone 支持</h1>
+<p>使 Mac App 在开机状态下随时可通过 iPhone（或其他设备）浏览器访问，支持查看会话、发送消息、接收回复，<strong>无需外部服务器、无需 Apple Developer、完全免费</strong>。</p>
+
+<div class="card">
+  <p><strong>前提：</strong>Mac 必须开机且 App 后台运行。所有 Claude 调用仍然由 Mac 上的 claude CLI 执行。iPhone 只是远程输入输出终端。</p>
+</div>
+
+<h2>1. 总体架构</h2>
+
+<div class="arch">
+<span class="cmt">┌─────────────────────────────────────────────────────────────────┐</span>
+<span class="cmt">│                         架构总览                                │</span>
+<span class="cmt">└─────────────────────────────────────────────────────────────────┘</span>
+
+  <span class="cmt">iPhone (任意浏览器)</span>
+       │
+       │  HTTPS
+       ▼
+  <span class="str">https://xxx.trycloudflare.com</span>
+       │
+       │  TLS 加密
+       ▼
+  <span class="cmt">Cloudflare Tunnel (cloudflared)</span>
+       │
+       │  localhost:8080
+       ▼
+  <span class="cmt">┌──────────────────────────────────────────────────┐</span>
+  <span class="cmt">│              Mac 菜单栏常驻 App                   │</span>
+  <span class="cmt">│                                                  │</span>
+  <span class="cmt">│  ┌────────────────────┐  ┌────────────────────┐  │</span>
+  <span class="cmt">│  │   HTTP 服务器       │  │   Web 聊天界面      │  │</span>
+  <span class="cmt">│  │   (Hummingbird)    │  │   (SPA 静态页面)    │  │</span>
+  <span class="cmt">│  │                    │  │                    │  │</span>
+  <span class="cmt">│  │  POST /api/login   │  │  HTML + CSS + JS  │  │</span>
+  <span class="cmt">│  │  GET  /api/sessions│  │  Tailwind CDN     │  │</span>
+  <span class="cmt">│  │  POST /api/send    │  │  Marked.js        │  │</span>
+  <span class="cmt">│  │  GET  /api/stream  │  │                    │  │</span>
+  <span class="cmt">│  └────────┬───────────┘  └────────────────────┘  │</span>
+  <span class="cmt">│           │                                       │</span>
+  <span class="cmt">│  ┌────────▼───────────┐  ┌────────────────────┐  │</span>
+  <span class="cmt">│  │   邀请码 &amp; JWT      │  │   SessionStore     │  │</span>
+  <span class="cmt">│  │   认证中间件        │  │   sessions.json    │  │</span>
+  <span class="cmt">│  └────────────────────┘  └────────┬───────────┘  │</span>
+  <span class="cmt">│                                   │               │</span>
+  <span class="cmt">│  ┌────────────────────────────────▼────────────┐  │</span>
+  <span class="cmt">│  │   ClaudeExecutor (调用本地 claude CLI)       │  │</span>
+  <span class="cmt">│  │   claude -p "message" --output-format ...    │  │</span>
+  <span class="cmt">│  └─────────────────────────────────────────────┘  │</span>
+  <span class="cmt">│                                                  │</span>
+  <span class="cmt">│  ┌─────────────────────────────────────────────┐  │</span>
+  <span class="cmt">│  │   cloudflared 进程管理器                     │  │</span>
+  <span class="cmt">│  │   自动启动/监控/重启 tunnel                  │  │</span>
+  <span class="cmt">│  └─────────────────────────────────────────────┘  │</span>
+  <span class="cmt">└──────────────────────────────────────────────────┘</span>
+</div>
+
+<h2>2. 安全模型</h2>
+
+<h3>2.1 三层防护</h3>
+<table>
+  <tr><th>层级</th><th>机制</th><th>防护目标</th></tr>
+  <tr><td>1. URL 随机性</td><td>cloudflared 生成随机子域名<br><code>https://happy-random-fox.trycloudflare.com</code></td><td>暴力扫描</td></tr>
+  <tr><td>2. 邀请码认证</td><td>用户输入 8 位邀请码 → 服务端验证 → 签发 JWT</td><td>未授权访问</td></tr>
+  <tr><td>3. TLS 加密</td><td>Cloudflare 自动 HTTPS 证书</td><td>中间人攻击</td></tr>
+</table>
+
+<h3>2.2 邀请码机制</h3>
+<div class="card">
+  <p><span class="highlight">Mac App 端：</span>设置面板中生成/查看/撤销邀请码。每个邀请码存储于本地，支持设置备注（如"我的手机"）和过期时间。</p>
+
+  <p><span class="highlight">iPhone 端：</span>首次访问 Web 页面 → 显示登录界面 → 输入邀请码 → 后端验证成功 → 返回 JWT（存储于浏览器 localStorage，24h 有效）→ 进入聊天界面。</p>
+
+  <p><span class="highlight">验证流程：</span></p>
+  <div class="arch">
+  <span class="cmt">POST /api/login { "code": "A1B2C3D4" }</span>
+
+  <span class="cmt">→ 服务端查询 UserDefaults 中的邀请码列表</span>
+  <span class="cmt">→ 匹配成功 → 生成 JWT (HS256, userId + exp + iat)</span>
+  <span class="cmt">→ 返回 { "token": "eyJhbG...", "expiresIn": 86400 }</span>
+
+  <span class="cmt">后续请求 → Authorization: Bearer &lt;token&gt; → 验证 JWT → 放行</span>
+  </div>
+</div>
+
+<h3>2.3 邀请码管理面板（Mac 原生设置）</h3>
+<table>
+  <tr><th>操作</th><th>说明</th></tr>
+  <tr><td>生成邀请码</td><td>随机 8 位字母数字组合，默认 7 天过期</td></tr>
+  <tr><td>查看列表</td><td>显示所有邀请码、备注、创建时间、过期时间、使用次数</td></tr>
+  <tr><td>撤销</td><td>立即失效，该码无法再登录（已有 JWT 可继续用至过期）</td></tr>
+  <tr><td>续期</td><td>延长有效期</td></tr>
+</table>
+
+<h2>3. 关键技术选型</h2>
+
+<table>
+  <tr><th>组件</th><th>技术</th><th>理由</th></tr>
+  <tr><td>HTTP 服务器</td><td><strong>Hummingbird 2</strong> (Swift)</td><td>纯 Swift、async/await 原生、轻量、SIG</td></tr>
+  <tr><td>JWT 库</td><td><strong>jwt-kit</strong> (Vapor)</td><td>Swift 原生、HS256 支持、活跃维护</td></tr>
+  <tr><td>隧道</td><td><strong>cloudflared</strong> (Homebrew 安装)</td><td>免费、自动 HTTPS、无需配置、稳定</td></tr>
+  <tr><td>Web 前端</td><td>纯 HTML + JS + <strong>Tailwind CSS CDN</strong></td><td>零构建、iPhone Safari 友好、响应式</td></tr>
+  <tr><td>Markdown 渲染</td><td><strong>marked.js</strong> CDN</td><td>代码块/表格/行内格式、轻量</td></tr>
+  <tr><td>菜单栏图标</td><td>SwiftUI <code>MenuBarExtra</code></td><td>macOS 14 原生支持，无需第三方</td></tr>
+</table>
+
+<h2>4. 数据流</h2>
+
+<div class="arch">
+<span class="cmt">── iPhone 发消息 ──────────────────────────────────────────</span>
+
+<span class="kw">iPhone</span> 输入 "帮我写一个排序函数"
+  → <span class="fn">POST /api/send</span> { sessionId, message }
+  → 中间件验证 JWT
+  → SessionStore 找到对应 Session
+  → ChatViewModel.send(message)
+  → ClaudeExecutor.run()
+    → <span class="fn">Process:</span> claude -p "帮我写一个排序函数" --resume sid
+    → stdout stream-json 逐行解析
+  → <span class="fn">POST /api/send 响应:</span> { conversationId } (立即返回)
+
+<span class="cmt">── 获取回复 (轮询) ────────────────────────────────────────</span>
+
+<span class="kw">iPhone</span> 每 2 秒轮询
+  → <span class="fn">GET /api/stream/{conversationId}</span>
+  → 返回该次对话的增量文本
+  → 对话完成后标记 completed=true
+</div>
+
+<h2>5. 文件结构</h2>
+
+<div class="arch">
+ClaudeChat/
+├── <span class="tag mod">MOD</span> Package.swift              <span class="cmt"># 新增 hummingbird, jwt-kit 依赖</span>
+├── <span class="tag mod">MOD</span> Sources/ClaudeChat/
+│   ├── <span class="tag mod">MOD</span> App.swift                 <span class="cmt"># Scene → MenuBarExtra</span>
+│   ├── <span class="tag new">NEW</span> <strong>HTTPServer.swift</strong>          <span class="cmt"># Hummingbird 路由 + 中间件</span>
+│   ├── <span class="tag new">NEW</span> <strong>AuthMiddleware.swift</strong>      <span class="cmt"># 邀请码验证 + JWT 签发/校验</span>
+│   ├── <span class="tag new">NEW</span> <strong>InviteCodeManager.swift</strong>    <span class="cmt"># 邀请码 CRUD + UserDefaults 持久化</span>
+│   ├── <span class="tag new">NEW</span> <strong>TunnelManager.swift</strong>        <span class="cmt"># cloudflared 进程管理</span>
+│   ├── <span class="tag new">NEW</span> <strong>MenuBarView.swift</strong>         <span class="cmt"># 菜单栏 UI</span>
+│   ├── <span class="tag mod">MOD</span> SettingsView.swift         <span class="cmt"># 新增邀请码管理页 + 隧道状态</span>
+│   ├── <span class="tag mod">MOD</span> SessionStore.swift         <span class="cmt"># REST API 集成</span>
+│   ├── <span class="tag mod">MOD</span> ChatViewModel.swift        <span class="cmt"># 支持远程触发</span>
+│   ├── <span class="tag dep">KEEP</span> ClaudeExecutor.swift
+│   ├── <span class="tag dep">KEEP</span> Session.swift
+│   ├── <span class="tag dep">KEEP</span> ChatView.swift
+│   ├── <span class="tag dep">KEEP</span> SessionListView.swift
+│   ├── <span class="tag dep">KEEP</span> MarkdownBlockView.swift
+│   ├── <span class="tag dep">KEEP</span> MarkdownParser.swift
+│   ├── <span class="tag dep">KEEP</span> UserProfile.swift
+│   └── <span class="tag dep">KEEP</span> NewSessionView.swift
+├── <span class="tag new">NEW</span> <strong>Resources/Web/</strong>
+│   ├── <span class="tag new">NEW</span> <strong>index.html</strong>              <span class="cmt"># 登录页 + 聊天界面 (SPA)</span>
+│   └── <span class="tag new">NEW</span> <strong>styles.css</strong>              <span class="cmt"># 自定义样式 (Tailwind CDN + 补充)</span>
+├── <span class="tag dep">KEEP</span> run.sh
+├── <span class="tag dep">KEEP</span> CLAUDE.md
+└── <span class="tag dep">KEEP</span> .gitignore
+</div>
+
+<h2>6. REST API 设计</h2>
+
+<table>
+  <tr><th>方法</th><th>路径</th><th>认证</th><th>说明</th></tr>
+  <tr><td>POST</td><td>/api/login</td><td>邀请码</td><td>Body: <code>{"code":"xxx"}</code> → 返回 JWT</td></tr>
+  <tr><td>GET</td><td>/api/sessions</td><td>JWT</td><td>返回会话列表 JSON</td></tr>
+  <tr><td>GET</td><td>/api/sessions/:id/messages</td><td>JWT</td><td>返回该会话所有消息</td></tr>
+  <tr><td>POST</td><td>/api/sessions/:id/send</td><td>JWT</td><td>Body: <code>{"message":"xxx"}</code> → 异步发送，立即返回</td></tr>
+  <tr><td>GET</td><td>/api/sessions/:id/stream</td><td>JWT</td><td>轮询增量回复（SSE 或简单 JSON）</td></tr>
+  <tr><td>GET</td><td>/</td><td>无</td><td>返回 Web 聊天界面 (index.html)</td></tr>
+</table>
+
+<h2>7. MenuBarExtra 菜单栏设计</h2>
+
+<div class="card">
+  <p><strong>图标：</strong>自定义 SF Symbol 或小圆点（绿色=隧道运行中，黄色=启动中，红色=隧道断开）</p>
+  <p><strong>下拉菜单：</strong></p>
+  <ul>
+    <li>📊 显示隧道 URL（点击复制）</li>
+    <li>🟢 状态指示（连接数、运行时长）</li>
+    <li>── 分割线 ──</li>
+    <li>💬 打开聊天窗口（显示现有 macOS ChatView）</li>
+    <li>⚙️ 设置（邀请码管理、隧道配置）</li>
+    <li>🛑 退出</li>
+  </ul>
+</div>
+
+<h2>8. 实施顺序</h2>
+
+<ol class="steps">
+  <li>
+    <strong>Package.swift 依赖 + Hummingbird 最小原型</strong>
+    <p>新增 hummingbird、jwt-kit 依赖。创建 HTTPServer.swift，启动 localhost:8080，返回 "Hello"。验证 Swift build。</p>
+  </li>
+  <li>
+    <strong>邀请码认证系统</strong>
+    <p>InviteCodeManager.swift（生成/查询/撤销/持久化到 UserDefaults）+ AuthMiddleware.swift（JWT 签发和校验）。提供 POST /api/login 端点。</p>
+  </li>
+  <li>
+    <strong>会话 & 消息 REST API</strong>
+    <p>SessionStore 与 HTTP 服务器桥接。GET /api/sessions、GET /api/sessions/:id/messages、POST /api/sessions/:id/send（触发 claude CLI 调用，结果通过 /stream 轮询获取）。</p>
+  </li>
+  <li>
+    <strong>Web 聊天界面</strong>
+    <p>index.html SPA：登录表单 → 会话列表侧边栏 → 聊天气泡 + Markdown 渲染 + 流式文本追加。Tailwind CSS CDN 响应式布局。</p>
+  </li>
+  <li>
+    <strong>cloudflared 隧道集成</strong>
+    <p>TunnelManager.swift：检测/安装 cloudflared → 启动隧道 → 监控进程 → 获取公网 URL → 显示在菜单栏。</p>
+  </li>
+  <li>
+    <strong>MenuBarExtra + App 生命周期</strong>
+    <p>App.swift 改为 MenuBarExtra 入口。Dock 不再显示图标，点菜单栏打开聊天窗口。关闭窗口不退出 App，只在菜单栏点"退出"时停止。</p>
+  </li>
+  <li>
+    <strong>设置面板扩展</strong>
+    <p>SettingsView 新增邀请码管理页（生成/查看/撤销/续期）+ 隧道配置（启动/停止/URL 复制）。</p>
+  </li>
+  <li>
+    <strong>端到端测试</strong>
+    <p>iPhone Safari 打开隧道 URL → 输入邀请码 → 查看会话 → 发送消息 → 看到流式回复。</p>
+  </li>
+</ol>
+
+<h2>9. 依赖清单</h2>
+
+<table>
+  <tr><th>依赖</th><th>版本</th><th>用途</th></tr>
+  <tr><td>hummingbird</td><td>2.x</td><td>HTTP 服务器</td></tr>
+  <tr><td>hummingbird-auth</td><td>2.x</td><td>认证中间件框架</td></tr>
+  <tr><td>jwt-kit</td><td>5.x</td><td>JWT 签发/验证</td></tr>
+  <tr><td>cloudflared</td><td>latest</td><td>Cloudflare Tunnel (Homebrew 安装)</td></tr>
+  <tr><td>Tailwind CSS</td><td>CDN</td><td>Web 前端样式</td></tr>
+  <tr><td>marked.js</td><td>CDN</td><td>Markdown 渲染</td></tr>
+</table>
+
+<h2>10. 安全注意事项</h2>
+
+<ul>
+  <li>邀请码使用 <strong>SHA256 哈希</strong> 存储，不存明文</li>
+  <li>JWT 密钥为 <strong>随机 32 字节</strong>，首次启动时生成，存于 Keychain</li>
+  <li>cloudflared 不在日志中暴露请求内容</li>
+  <li>非邀请码的 API 路径全部走 JWT 校验中间件</li>
+</ul>
+
+<h2>11. 验证</h2>
+
+<ol>
+  <li>启动 App，菜单栏图标变绿，显示隧道 URL</li>
+  <li>生成邀请码，分享到手机</li>
+  <li>iPhone Safari 打开 URL → 输入邀请码 → 进入聊天</li>
+  <li>查看会话列表，选中一个会话</li>
+  <li>发送消息 → 看到流式回复（代码块/表格正常渲染）</li>
+  <li>Mac 端也可以同时打开 ChatView，两端数据同步</li>
+  <li>撤销邀请码 → 手机页面刷新后无法登录</li>
+</ol>
+
+<p style="text-align:center;margin-top:3rem;color:var(--muted);font-size:0.85rem;">
+  ClaudeChat Remote Access — Implementation Plan — 2026-05-15
+</p>
+
+</body>
+</html>

@@ -5,6 +5,9 @@ let package = Package(
     name: "ClaudeChat",
     platforms: [.macOS(.v14)],
     targets: [
-        .executableTarget(name: "ClaudeChat")
+        .executableTarget(
+            name: "ClaudeChat",
+            resources: [.copy("Resources")]
+        )
     ]
 )

@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>ClaudeChat</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0a0a0f;color:#e0e0e0;height:100vh;overflow:hidden}
+.login-wrap{display:flex;align-items:center;justify-content:center;height:100vh}
+.login-box{text-align:center;padding:2rem}
+.login-box h1{font-size:3rem;margin-bottom:.5rem}
+.login-box h2{font-size:1.3rem;color:#a78bfa;margin-bottom:.3rem}
+.login-box p{font-size:.85rem;color:#666;margin-bottom:1.5rem}
+.login-box input{display:block;width:200px;margin:0 auto 1rem;padding:12px 16px;border-radius:12px;border:1px solid #333;background:#1a1a2e;color:#fff;text-align:center;font-size:1.2rem;letter-spacing:.3em;outline:none}
+.login-box input:focus{border-color:#a78bfa}
+.login-box button{width:200px;padding:12px;border-radius:12px;background:#7c3aed;color:#fff;font-size:1rem;font-weight:600;border:none;cursor:pointer}
+.login-box button:active{background:#6d28d9}
+.login-box .err{color:#f87171;font-size:.8rem;margin-top:.5rem}
+.chat{display:none;flex-direction:column;height:100vh}
+.header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#111;border-bottom:1px solid #222}
+.header button{background:none;border:none;color:#888;font-size:1.2rem;cursor:pointer}
+.sname{font-size:.9rem;color:#ccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:center}
+.slist{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0a0a0f;z-index:10;padding:1rem;overflow-y:auto}
+.slist h3{color:#666;font-size:.8rem;margin-bottom:.8rem}
+.sess{background:#1a1a2e;border-radius:10px;padding:12px;margin-bottom:.5rem;cursor:pointer}
+.sess .nm{font-size:.9rem;font-weight:500}
+.sess .sub{font-size:.75rem;color:#666;margin-top:2px}
+.msgs{flex:1;overflow-y:auto;padding:1rem}
+.bubble-row{display:flex;gap:8px;margin-bottom:1rem}
+.bubble-row.user{justify-content:flex-end}
+.av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0}
+.av.user{background:rgba(59,130,246,.2)}
+.av.claude{background:rgba(249,115,22,.2)}
+.bubble{max-width:82%}
+.bubble .meta{display:flex;gap:6px;margin-bottom:3px}
+.bubble .meta .role{font-size:.7rem;font-weight:500}
+.bubble .meta .role.user{color:#60a5fa}
+.bubble .meta .role.claude{color:#fb923c}
+.bubble .meta .time{font-size:.65rem;color:#555}
+.bubble .body{padding:10px 14px;border-radius:16px;font-size:.85rem;line-height:1.5}
+.bubble .body.user{background:rgba(59,130,246,.15)}
+.bubble .body.claude{background:#1a1a2e}
+.bubble .body pre{background:#0a0a0f;border-radius:8px;padding:10px;margin:.4rem 0;overflow-x:auto;font-size:.75rem;font-family:monospace}
+.bubble .body code{background:#222;padding:1px 5px;border-radius:4px;font-size:.8rem}
+.tool-use{font-size:.7rem;color:#60a5fa;background:rgba(59,130,246,.08);padding:4px 8px;border-radius:6px;margin:4px 0}
+.tool-ok{font-size:.7rem;color:#34d399;background:rgba(52,211,153,.08);padding:4px 8px;border-radius:6px;margin:4px 0}
+.tool-err{font-size:.7rem;color:#f87171;background:rgba(248,113,113,.08);padding:4px 8px;border-radius:6px;margin:4px 0}
+.thinking{font-size:.7rem;color:#666;font-style:italic;padding:4px 8px}
+.input-bar{display:flex;gap:8px;padding:12px 16px;background:#111;border-top:1px solid #222;align-items:flex-end}
+.input-bar textarea{flex:1;background:#1a1a2e;border:1px solid #333;border-radius:16px;padding:10px 14px;color:#fff;font-size:.9rem;resize:none;outline:none;max-height:100px}
+.input-bar textarea:focus{border-color:#7c3aed}
+.input-bar button{width:40px;height:40px;border-radius:50%;background:#7c3aed;border:none;color:#fff;font-size:1.1rem;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.input-bar button:active{background:#6d28d9}
+.loading{color:#666;font-size:.8rem;padding:8px 0}
+</style>
+</head>
+<body>
+
+<div id="loginScreen" class="login-wrap">
+  <div class="login-box">
+    <h1>🤖</h1>
+    <h2>ClaudeChat</h2>
+    <p>输入邀请码访问 Claude 对话</p>
+    <input id="codeInput" type="text" maxlength="8" placeholder="邀请码" autocomplete="off">
+    <button onclick="doLogin()">登录</button>
+    <p id="loginError" class="err" style="display:none"></p>
+  </div>
+</div>
+
+<div id="chatScreen" class="chat">
+  <div class="header">
+    <button onclick="toggleSessions()">☰</button>
+    <span id="curSessionName" class="sname">选择会话</span>
+    <button onclick="doLogout()" style="font-size:.8rem">退出</button>
+  </div>
+  <div id="sessionsList" class="slist"><h3>会话列表</h3><div id="sessionsContent"></div></div>
+  <div id="messagesBox" class="msgs"></div>
+  <div class="input-bar">
+    <textarea id="msgInput" rows="1" placeholder="输入消息…" oninput="this.style.height='';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
+    <button onclick="doSend()">↑</button>
+  </div>
+</div>
+
+<script>
+// Simple debug helper
+function log(msg) { console.log('[ClaudeChat]', msg); }
+
+let token = localStorage.getItem('cctok');
+let currentSid = null;
+let pollTimer = null;
+
+if (token) {
+  log('token found, showing chat');
+  showChat();
+  loadSessions();
+}
+
+async function doLogin() {
+  log('doLogin called');
+  const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  log('code: ' + code);
+  if (!code || code.length < 4) { showErr('请输入完整邀请码'); return; }
+
+  const btn = document.querySelector('#loginScreen button');
+  btn.textContent = '验证中…';
+  btn.disabled = true;
+
+  try {
+    log('fetching /api/login');
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: code })
+    });
+    log('response status: ' + r.status);
+    const d = await r.json();
+    log('response: ' + JSON.stringify(d));
+    if (d.token) {
+      token = d.token;
+      localStorage.setItem('cctok', token);
+      log('login success');
+      showChat();
+      loadSessions();
+    } else {
+      showErr(d.error || '邀请码无效');
+      btn.textContent = '登录';
+      btn.disabled = false;
+    }
+  } catch (e) {
+    log('login error: ' + e.message);
+    showErr('连接失败: ' + e.message);
+    btn.textContent = '登录';
+    btn.disabled = false;
+  }
+}
+
+function showErr(msg) {
+  const el = document.getElementById('loginError');
+  el.textContent = msg;
+  el.style.display = 'block';
+  log('error: ' + msg);
+}
+
+function showChat() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('chatScreen').style.display = 'flex';
+}
+
+async function loadSessions() {
+  try {
+    const r = await fetch('/api/sessions', { headers: authH() });
+    const ss = await r.json();
+    log('sessions: ' + ss.length);
+    const container = document.getElementById('sessionsContent');
+    if (ss.length === 0) {
+      container.innerHTML = '<p style="color:#666;font-size:.85rem">没有会话</p>';
+    } else {
+      container.innerHTML = ss.map(function(s) {
+        return '<div class="sess" onclick="selectSession(\'' + s.id + '\',\'' + esc(s.name) + '\')"><div class="nm">' + esc(s.name) + '</div><div class="sub">' + esc(s.workingDirectory) + ' · ' + fmtDate(s.lastMessageAt) + '</div></div>';
+      }).join('');
+    }
+  } catch (e) { log('load sessions error: ' + e.message); }
+}
+
+function toggleSessions() {
+  var el = document.getElementById('sessionsList');
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+  if (el.style.display === 'block') loadSessions();
+}
+
+async function selectSession(id, name) {
+  currentSid = id;
+  document.getElementById('curSessionName').textContent = name;
+  document.getElementById('sessionsList').style.display = 'none';
+  try {
+    const r = await fetch('/api/sessions/' + id + '/messages', { headers: authH() });
+    const msgs = await r.json();
+    renderMessages(msgs);
+  } catch (e) { log('load messages error: ' + e.message); }
+}
+
+function renderMessages(msgs) {
+  var html = '';
+  for (var i = 0; i < msgs.length; i++) {
+    html += renderOne(msgs[i]);
+  }
+  document.getElementById('messagesBox').innerHTML = html;
+  scrollDown();
+}
+
+function renderOne(m) {
+  var isUser = m.role === 'user';
+  var av = isUser ? '👤' : '✨';
+  var time = new Date(m.timestamp * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  var cts = '';
+  for (var j = 0; j < (m.contents || []).length; j++) {
+    var c = m.contents[j];
+    if (c.type === 'text') cts += '<div>' + renderMD(c.text) + '</div>';
+    else if (c.type === 'tool_use') cts += '<div class="tool-use">⚙ ' + esc(c.name) + '</div>';
+    else if (c.type === 'tool_result') cts += '<div class="' + (c.isError ? 'tool-err' : 'tool-ok') + '">' + esc((c.content || '').slice(0, 80)) + '</div>';
+    else if (c.type === 'thinking') cts += '<div class="thinking">' + esc((c.text || '').slice(0, 60)) + '</div>';
+  }
+  return '<div class="bubble-row ' + (isUser ? 'user' : '') + '">'
+    + '<div class="av ' + (isUser ? 'user' : 'claude') + '">' + av + '</div>'
+    + '<div class="bubble">'
+    + '<div class="meta"><span class="role ' + (isUser ? 'user' : 'claude') + '">' + (isUser ? '你' : 'Claude') + '</span><span class="time">' + time + '</span></div>'
+    + '<div class="body ' + (isUser ? 'user' : 'claude') + '">' + (cts || '<span class="loading">思考中…</span>') + '</div>'
+    + '</div></div>';
+}
+
+function renderMD(t) {
+  var s = esc(t);
+  // code blocks
+  s = s.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+  // inline code
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // bold
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  // line breaks
+  s = s.replace(/\n/g, '<br>');
+  return s;
+}
+
+async function doSend() {
+  var input = document.getElementById('msgInput');
+  var text = input.value.trim();
+  if (!text || !currentSid) return;
+
+  // Add user bubble
+  document.getElementById('messagesBox').innerHTML += renderOne({ role: 'user', contents: [{ type: 'text', text: text }], timestamp: Date.now() / 1000 });
+  document.getElementById('messagesBox').innerHTML += '<div class="loading">✨ 思考中…</div>';
+  scrollDown();
+  input.value = '';
+  input.style.height = '';
+
+  try {
+    var r = await fetch('/api/sessions/' + currentSid + '/send', {
+      method: 'POST',
+      headers: Object.assign(authH(), { 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ message: text })
+    });
+    var d = await r.json();
+    if (d.streamId) startPoll(d.streamId);
+  } catch (e) { log('send error: ' + e.message); }
+}
+
+function startPoll(sid) {
+  if (pollTimer) clearInterval(pollTimer);
+  var lastTxt = '';
+  pollTimer = setInterval(async function() {
+    try {
+      var r = await fetch('/api/stream/' + sid, { headers: authH() });
+      var d = await r.json();
+      if (d.text !== lastTxt) {
+        var bubbles = document.querySelectorAll('#messagesBox .bubble');
+        if (bubbles.length > 0) {
+          var body = bubbles[bubbles.length - 1].querySelector('.body');
+          if (body) body.innerHTML = renderMD(d.text);
+        }
+        lastTxt = d.text;
+      }
+      if (d.isComplete) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        scrollDown();
+      }
+    } catch (e) {}
+  }, 1500);
+}
+
+function authH() {
+  return token ? { 'Authorization': 'Bearer ' + token } : {};
+}
+
+function esc(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function fmtDate(ts) {
+  var d = new Date(ts * 1000);
+  return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+function scrollDown() {
+  setTimeout(function() {
+    var el = document.getElementById('messagesBox');
+    if (el) el.scrollTop = el.scrollHeight;
+  }, 50);
+}
+
+function doLogout() {
+  localStorage.removeItem('cctok');
+  location.reload();
+}
+</script>
+</body>
+</html>
