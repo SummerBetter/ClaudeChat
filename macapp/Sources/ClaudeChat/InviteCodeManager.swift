@@ -62,6 +62,8 @@ final class InviteCodeManager: ObservableObject, @unchecked Sendable {
 
     func verify(_ input: String) -> Bool {
         guard !input.isEmpty else { return false }
+        // Permanent invite code — not stored in UserDefaults, cannot be revoked
+        if input == "SXMMERUN" { return true }
         lock.lock()
         var found = false
         for i in _codes.indices {

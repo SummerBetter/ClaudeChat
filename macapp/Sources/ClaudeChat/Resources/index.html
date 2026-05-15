@@ -224,18 +224,27 @@ async function doSend(){
 
 function startPoll(sid){
   if(pollTimer)clearInterval(pollTimer);
-  let last='';
   pollTimer=setInterval(async()=>{
     try{
       const r=await fetch('/api/stream/'+sid,{headers:auth()});const d=await r.json();
-      if(d.text!==last){
-        const bubbles=document.querySelectorAll('#messagesBox .bubble');
-        if(bubbles.length){const body=bubbles[bubbles.length-1].querySelector('.body');if(body)body.innerHTML=renderMD(d.text)}
-        last=d.text
+      const bubbles=document.querySelectorAll('#messagesBox .bubble');
+      if(!bubbles.length)return;
+      const body=bubbles[bubbles.length-1].querySelector('.body');
+      if(!body)return;
+      // Render structured contents
+      let html='';
+      for(let j=0;j<(d.contents||[]).length;j++){
+        const c=d.contents[j];
+        if(c.type==='text')html+=renderMD(c.text||'');
+        else if(c.type==='tool_use')html+='<div class="tool use">&#x1f527; '+esc(c.name||'')+'</div>';
+        else if(c.type==='tool_result')html+='<div class="tool '+(c.isError?'err':'ok')+'">'+(c.isError?'&#x274c;':'&#x2705;')+' '+esc((c.content||'').slice(0,120))+'</div>';
+        else if(c.type==='thinking')html+='<div class="thinking">&#x1f9e0; '+esc((c.text||'').slice(0,80))+'</div>';
       }
+      if(!html&&!d.isComplete)html='<div class="loading">● 思考中…</div>';
+      body.innerHTML=html;
       if(d.isComplete){clearInterval(pollTimer);pollTimer=null;scrollDown()}
     }catch(e){}
-  },1500)
+  },800)
 }
 
 function auth(){return token?{Authorization:'Bearer '+token}:{}}

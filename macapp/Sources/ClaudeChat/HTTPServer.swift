@@ -10,17 +10,35 @@ final class HTTPServer {
     typealias GetSessions = () -> [Session]
     typealias GetMessages = (UUID) -> [ChatMessage]?
     typealias SendMessage = (UUID, String) -> Void
+    typealias IsRunning = (UUID) -> Bool
     private var getSessionsBlock: GetSessions?
     private var getMessagesBlock: GetMessages?
     private var sendMessageBlock: SendMessage?
-    private var activeStreams: [UUID: (text: String, complete: Bool)] = [:]
+    private var isAssistantRunning: IsRunning?
+    private var activeStreams: [UUID: StreamState] = [:]
+
+    struct StreamState {
+        var contents: [ContentJSON] = []
+        var isComplete = false
+    }
+
+    struct ContentJSON: Codable {
+        var type: String
+        var text: String?
+        var name: String?
+        var input: String?
+        var content: String?
+        var isError: Bool?
+    }
 
     func configure(getSessions: @escaping GetSessions,
                    getMessages: @escaping GetMessages,
-                   sendMessage: @escaping SendMessage) {
+                   sendMessage: @escaping SendMessage,
+                   isRunning: @escaping IsRunning) {
         getSessionsBlock = getSessions
         getMessagesBlock = getMessages
         sendMessageBlock = sendMessage
+        isAssistantRunning = isRunning
     }
 
     init(port: UInt16 = 8888) { self.port = port }
@@ -174,28 +192,49 @@ final class HTTPServer {
         else { return ("application/json", #"{"error":"invalid"}"#) }
         sendMessageBlock?(id, msg)
         let streamId = UUID()
-        activeStreams[streamId] = ("", false)
-        // Background poll for completion
+        activeStreams[streamId] = StreamState()
+        // Background poll — fast refresh (~0.8s) + structured content
         Task { @MainActor [weak self] in
             guard let self else { return }
             while true {
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .milliseconds(800))
                 guard self.activeStreams.keys.contains(streamId) else { break }
                 let ss = self.getSessionsBlock?() ?? []
                 let last = ss.first(where: { $0.id == id })?.messages.last
-                let txt = last?.text ?? ""
-                let done = last?.role == .assistant && !txt.isEmpty
-                self.activeStreams[streamId] = (txt, done)
-                if done { break }
+                guard last?.role == .assistant, let lastMsg = last else { continue }
+                let isDone = self.isAssistantRunning?(id) == false
+
+                var state = StreamState()
+                state.contents = lastMsg.contents.map { c in
+                    switch c {
+                    case .text(let t): return ContentJSON(type: "text", text: t)
+                    case .thinking(let t): return ContentJSON(type: "thinking", text: t)
+                    case .toolUse(_, let n, let i): return ContentJSON(type: "tool_use", name: n, input: i)
+                    case .toolResult(_, let ct, let e): return ContentJSON(type: "tool_result", content: ct, isError: e)
+                    case .image: return ContentJSON(type: "image")
+                    }
+                }
+                state.isComplete = isDone
+                self.activeStreams[streamId] = state
+                if isDone { break }
             }
         }
         return ("application/json", #"{"streamId":"\#(streamId.uuidString)"}"#)
     }
 
     private func stream(_ sid: String) -> (String, String) {
-        guard let id = UUID(uuidString: sid) else { return ("application/json", #"{"text":"","isComplete":true}"#) }
-        let s = activeStreams[id]
-        return ("application/json", #"{"text":"\#(esc(s?.text ?? ""))","isComplete":\#(s?.complete ?? true)}"#)
+        guard let id = UUID(uuidString: sid) else { return ("application/json", #"{"contents":[],"isComplete":true}"#) }
+        let s = activeStreams[id] ?? StreamState(isComplete: true)
+        let contentsJSON = s.contents.map { c -> String in
+            var parts: [String] = [#""type":"\#(c.type)""#]
+            if let t = c.text { parts.append(#""text":"\#(esc(t))""#) }
+            if let n = c.name { parts.append(#""name":"\#(esc(n))""#) }
+            if let i = c.input { parts.append(#""input":"\#(esc(i))""#) }
+            if let ct = c.content { parts.append(#""content":"\#(esc(ct))""#) }
+            if let e = c.isError { parts.append(#""isError":\#(e)"#) }
+            return "{\(parts.joined(separator: ","))}"
+        }
+        return ("application/json", #"{"contents":[\#(contentsJSON.joined(separator: ","))],"isComplete":\#(s.isComplete)}"#)
     }
 
     private func webUI() -> (String, String) {

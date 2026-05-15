@@ -54,7 +54,8 @@ struct ClaudeChatApp: App {
                 httpServer.configure(
                     getSessions: { store.sessions },
                     getMessages: { id in store.sessions.first(where: { $0.id == id })?.messages },
-                    sendMessage: { id, msg in store.selectSession(id); store.currentViewModel?.send(msg) }
+                    sendMessage: { id, msg in store.selectSession(id); store.currentViewModel?.send(msg) },
+                    isRunning: { _ in store.currentViewModel?.isRunning ?? false }
                 )
                 // Auto-start HTTP server
                 if let err = httpServer.start() {
