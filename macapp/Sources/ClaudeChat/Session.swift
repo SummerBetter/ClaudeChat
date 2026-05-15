@@ -172,7 +172,7 @@ struct Session: Identifiable, Equatable, Codable {
     var claudeSessionId: String?
     var messages: [ChatMessage]
     let createdAt: Date
-    var updatedAt: Date
+    var lastMessageAt: Date
 
     init(
         id: UUID = UUID(),
@@ -182,7 +182,7 @@ struct Session: Identifiable, Equatable, Codable {
         claudeSessionId: String? = nil,
         messages: [ChatMessage] = [],
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        lastMessageAt: Date = Date()
     ) {
         self.id = id
         self.name = name
@@ -191,6 +191,35 @@ struct Session: Identifiable, Equatable, Codable {
         self.claudeSessionId = claudeSessionId
         self.messages = messages
         self.createdAt = createdAt
-        self.updatedAt = updatedAt
+        self.lastMessageAt = lastMessageAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        workingDirectory = try c.decode(String.self, forKey: .workingDirectory)
+        permissionMode = (try? c.decode(PermMode.self, forKey: .permissionMode)) ?? .acceptEdits
+        claudeSessionId = try? c.decode(String.self, forKey: .claudeSessionId)
+        messages = (try? c.decode([ChatMessage].self, forKey: .messages)) ?? []
+        createdAt = (try? c.decode(Date.self, forKey: .createdAt)) ?? Date()
+        lastMessageAt = (try? c.decode(Date.self, forKey: .lastMessageAt)) ?? Date()
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, workingDirectory, permissionMode, claudeSessionId
+        case messages, createdAt, lastMessageAt
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(workingDirectory, forKey: .workingDirectory)
+        try c.encode(permissionMode, forKey: .permissionMode)
+        try c.encodeIfPresent(claudeSessionId, forKey: .claudeSessionId)
+        try c.encode(messages, forKey: .messages)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(lastMessageAt, forKey: .lastMessageAt)
     }
 }

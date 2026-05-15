@@ -55,7 +55,7 @@ struct SessionListView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
-            Text(session.updatedAt, style: .relative)
+            Text(formatDate(session.lastMessageAt))
                 .font(.caption2)
                 .foregroundColor(.secondary)
         }
@@ -73,5 +73,12 @@ struct SessionListView: View {
             store.renameSession(session.id, to: trimmed)
         }
         editingSessionId = nil
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "zh_CN")
+        fmt.dateFormat = "M月d日 HH:mm"
+        return fmt.string(from: date)
     }
 }

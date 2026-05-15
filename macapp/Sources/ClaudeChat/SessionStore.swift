@@ -48,7 +48,6 @@ final class SessionStore: ObservableObject {
     func renameSession(_ id: UUID, to newName: String) {
         guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[idx].name = newName
-        sessions[idx].updatedAt = Date()
         saveSessions()
     }
 
@@ -92,21 +91,19 @@ final class SessionStore: ObservableObject {
     private func persistMessages(for id: UUID, messages: [ChatMessage]) {
         guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[idx].messages = messages
-        sessions[idx].updatedAt = Date()
+        sessions[idx].lastMessageAt = Date()
         saveSessions()
     }
 
     private func persistClaudeSessionId(for id: UUID, sid: String) {
         guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[idx].claudeSessionId = sid
-        sessions[idx].updatedAt = Date()
         saveSessions()
     }
 
     private func persistPermissionMode(for id: UUID, mode: PermMode) {
         guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[idx].permissionMode = mode
-        sessions[idx].updatedAt = Date()
         saveSessions()
     }
 
